@@ -2,47 +2,45 @@
 import { GoogleGenAI } from "@google/genai";
 import { Platform, OptimizedListing } from "../types";
 
-const SYSTEM_INSTRUCTION = `You are the ListingPro AI Core, a specialist tool for resellers.
-Your mission: Transform rough notes, photos, or descriptions into high-performing marketplace listings.
+const SYSTEM_INSTRUCTION = `You are ListingPro AI, a specialist tool for resellers.
+Your mission: Analyze product media (photos or videos) and notes to create professional marketplace listings.
 
-Workflow:
-1. Identify brand, model, condition, and key features.
-2. Analyze market context for the specific platform (eBay, Poshmark, etc.).
-3. Generate SEO-optimized titles and detailed, persuasive descriptions.
-4. Provide a suggested price based on typical market value.
+Capabilities:
+1. VISION: Watch videos or look at photos to identify brand, model, features, and condition.
+2. SEO: Generate high-conversion titles and descriptions for specific platforms.
+3. PRICING: Provide market-value estimates.
 
-Platform Styles:
-- eBay: Professional, keyword-rich, feature-dense.
-- Poshmark: Social, friendly, uses emojis, emphasizes brand/style.
-- Etsy: Story-driven, highlighting craftsmanship or vintage appeal.
-- Facebook: Direct, local-focused, highlight value.
-- Amazon: Structured, SKU-like, focus on specs.
-- TikTok Shop: Hook-oriented, catchy captions.
+Platform Context:
+- eBay: Professional and specs-heavy.
+- Poshmark: Brand-focused and social.
+- Etsy: Story-telling and artisanal.
+- TikTok/FB: Catchy and value-driven.
 
-Always return a JSON object containing: title, description, hashtags (array), suggestedPrice, agentInsights (object with research and marketAnalysis keys).`;
+Return a valid JSON object: { "title": "...", "description": "...", "hashtags": ["..."], "suggestedPrice": "...", "agentInsights": { "research": "...", "marketAnalysis": "..." } }`;
 
 export async function optimizeListing(
   platform: Platform,
   roughTitle: string,
   zipCode?: string,
-  imageData?: string
+  mediaData?: { data: string; mimeType: string }
 ): Promise<OptimizedListing> {
+  // Use the environment variable set in Netlify
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-flash-preview'; 
-  
-  const searchPrompt = `Optimize this listing for ${platform}.
-  Item Context: "${roughTitle}". 
-  Location: ${zipCode || 'General'}.
-  ${imageData ? "A photo of the item is provided for visual analysis." : ""}
-  
-  Return a structured JSON listing optimization with grounding links if applicable.`;
 
-  const parts: any[] = [{ text: searchPrompt }];
-  if (imageData) {
+  const prompt = `Analyze this ${platform} listing.
+  Initial Info: "${roughTitle}". 
+  Zip Code: ${zipCode || 'Not provided'}.
+  ${mediaData ? "I have attached a " + (mediaData.mimeType.startsWith('video') ? "video clip" : "photo") + " of the item. Use it to extract brand details, condition, and specific features." : ""}
+  
+  Provide the optimized listing in JSON format.`;
+
+  const parts: any[] = [{ text: prompt }];
+  if (mediaData) {
     parts.push({
       inlineData: {
-        mimeType: 'image/jpeg',
-        data: imageData.split(',')[1]
+        mimeType: mediaData.mimeType,
+        data: mediaData.data.split(',')[1]
       }
     });
   }
@@ -52,7 +50,7 @@ export async function optimizeListing(
     contents: { parts },
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
-      tools: [{ googleSearch: {} }],
+      tools: [{ googleSearch: {} }], // Available in free tier
     }
   });
 
@@ -64,11 +62,11 @@ export async function optimizeListing(
     result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text);
   } catch (e) {
     result = {
-      title: roughTitle,
+      title: roughTitle || "New Listing",
       description: text,
       hashtags: [],
-      suggestedPrice: "Contact for Quote",
-      agentInsights: { research: "Basic scan complete.", marketAnalysis: "Review sources below." }
+      suggestedPrice: "Market Price",
+      agentInsights: { research: "Analysis complete.", marketAnalysis: "Check sources below." }
     };
   }
   
@@ -83,9 +81,9 @@ export async function optimizeListing(
     title: result.title || roughTitle,
     description: result.description || text,
     hashtags: result.hashtags || [],
-    keywords: result.keywords || [],
+    keywords: [],
     suggestedPrice: result.suggestedPrice || "Market Price",
-    agentInsights: result.agentInsights || { research: "Analyzing brand...", marketAnalysis: "Analyzing value..." },
+    agentInsights: result.agentInsights || { research: "Analyzing...", marketAnalysis: "Analyzing..." },
     sources
   } as OptimizedListing;
 }
