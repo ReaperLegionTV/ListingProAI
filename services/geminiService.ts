@@ -25,8 +25,9 @@ export async function optimizeListing(
   zipCode?: string,
   imageData?: string
 ): Promise<OptimizedListing> {
+  // Always create a new instance to ensure we use the most recent process.env.API_KEY
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  // Flash is faster and more resilient to congestion on high-traffic deployments
+  // Gemini 3 Flash is the recommended model for general text tasks and has higher rate limits
   const model = 'gemini-3-flash-preview'; 
   
   const searchPrompt = `AGENT DIRECTIVE:
@@ -69,8 +70,8 @@ export async function optimizeListing(
       description: text,
       hashtags: [],
       keywords: [],
-      suggestedPrice: "Checking Sold Comps...",
-      agentInsights: { research: "Market scan complete.", marketAnalysis: "Check sources." }
+      suggestedPrice: "Checking Recent Solds...",
+      agentInsights: { research: "Market scan complete.", marketAnalysis: "Review sources below." }
     };
   }
   
@@ -86,7 +87,7 @@ export async function optimizeListing(
     description: result.description || text,
     hashtags: result.hashtags || [],
     keywords: result.keywords || [],
-    suggestedPrice: result.suggestedPrice || "Market Price",
+    suggestedPrice: result.suggestedPrice || "Market Value",
     agentInsights: result.agentInsights || { research: "Analyzing...", marketAnalysis: "Analyzing..." },
     sources
   } as OptimizedListing;
