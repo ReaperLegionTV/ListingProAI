@@ -2,23 +2,26 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Platform, OptimizedListing } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Note: GoogleGenAI is re-instantiated in the generate calls to ensure the latest API Key
+// from the session is used, especially for Veo models.
 
 const SYSTEM_INSTRUCTION = `You are the ListingPro AI Core, a multi-agent reseller intelligence system.
 Your workflow:
-1. RESEARCH AGENT: Deep dive into item specifications, brand provenance, and technical details.
-2. MARKET ANALYST AGENT: Scan global and local marketplaces (using provided zip context) for real-time sales data, competitor pricing, and demand velocity.
-3. OPTIMIZATION AGENT: Construct high-conversion metadata tailored for specific platform algorithms.
+1. RESEARCH AGENT: Deep dive into item specifications and brand details.
+2. MARKET ANALYST AGENT: Scan global and local marketplaces for real-time sales data.
+3. OPTIMIZATION AGENT: Construct high-conversion metadata.
+4. CINEMATOGRAPHY AGENT: Design cinematic prompts for product showcase videos.
 
 Platform Specifics:
-- eBay: High-intent SEO, 80-char titles, technical specs.
-- Poshmark: Stylized, brand-forward, social engagement tags.
-- Etsy: Artisanal, material-heavy, story-driven narratives.
-- Facebook Marketplace: Localized value props, direct tone, pickup-friendly.
-- Amazon: Professional SKU-style titles, benefit-driven bullet points, ASIN-readiness.
-- Dropshipping: Emotional hooks, USP-focused, viral-ready ad copy.
+- eBay: High-intent SEO.
+- Poshmark: Stylized, brand-forward.
+- Etsy: Artisanal, story-driven.
+- Facebook Marketplace: Localized value props.
+- Amazon: Professional SKU-style.
+- Dropshipping: USP-focused hooks.
+- TikTok Shop: Hook-driven viral captions.
 
-Always return valid JSON. Use search results to provide verified price benchmarks.`;
+Always return valid JSON.`;
 
 export async function optimizeListing(
   platform: Platform,
@@ -26,29 +29,27 @@ export async function optimizeListing(
   zipCode?: string,
   imageData?: string
 ): Promise<OptimizedListing> {
+  // Fix: Re-instantiate ai instance right before the call to pick up the latest session key
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const model = 'gemini-3-pro-preview';
   
   const searchPrompt = `AGENT DIRECTIVE:
+  Identify: "${roughTitle}". 
+  Market: ${zipCode ? `Local Zip ${zipCode}` : 'Global'}.
+  Platform: ${platform}.
   
-  PHASE 1 (RESEARCH): Identify the exact item: "${roughTitle}". 
-  PHASE 2 (ANALYSIS): Locate market 'Comps' (Comparable sales). 
-  Global context + Local context ${zipCode ? `(Targeting Zip Code: ${zipCode})` : 'Universal'}.
-  Check current listings on ${platform} and competitors.
+  ${imageData ? "Image data provided." : "Text-only."}
   
-  PHASE 3 (SYNTHESIS): Generate optimized listing for ${platform}.
-  
-  ${imageData ? "Visual data provided via attached image." : "Text-only analysis required."}
-  
-  REQUIRED JSON SCHEMA:
+  RETURN JSON:
   {
-    "title": "Optimized SEO title",
-    "description": "Formatted description (use bullet points if for Amazon)",
-    "hashtags": ["tag1", "tag2"],
-    "keywords": ["key1", "key2"],
-    "suggestedPrice": "Range in USD",
+    "title": "Optimized Title",
+    "description": "Rich description",
+    "hashtags": ["#tag1"],
+    "keywords": ["key"],
+    "suggestedPrice": "Price Range",
     "agentInsights": {
-      "research": "Item identification details",
-      "marketAnalysis": "Price competition findings"
+      "research": "Brand/Item notes",
+      "marketAnalysis": "Price competition data"
     }
   }`;
 
@@ -91,9 +92,7 @@ export async function optimizeListing(
     }
   });
 
-  const textOutput = response.text || "{}";
-  const result = JSON.parse(textOutput.trim());
-  
+  const result = JSON.parse(response.text?.trim() || "{}");
   const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
     ?.filter((chunk: any) => chunk.web)
     ?.map((chunk: any) => ({
@@ -102,4 +101,38 @@ export async function optimizeListing(
     })) || [];
 
   return { ...result, sources } as OptimizedListing;
+}
+
+export async function generateListingVideo(
+  title: string,
+  imageData: string | null
+): Promise<string> {
+  // Fix: Re-instantiate ai instance right before the call to pick up the latest session key
+  let ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  let operation = await ai.models.generateVideos({
+    model: 'veo-3.1-fast-generate-preview',
+    prompt: `A cinematic product showcase for "${title}". High resolution, elegant lighting, slow pan around the item. Professional advertising style.`,
+    ...(imageData && {
+      image: {
+        imageBytes: imageData.split(',')[1],
+        mimeType: 'image/jpeg'
+      }
+    }),
+    config: {
+      numberOfVideos: 1,
+      resolution: '720p',
+      aspectRatio: '9:16' // Vertical for TikTok/Mobile
+    }
+  });
+
+  while (!operation.done) {
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    // Fix: Re-instantiate ai instance before every operation status check to pick up potential key updates
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    operation = await ai.operations.getVideosOperation({ operation: operation });
+  }
+
+  const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+  return `${downloadLink}&key=${process.env.API_KEY}`;
 }

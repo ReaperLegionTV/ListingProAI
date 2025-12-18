@@ -5,7 +5,8 @@ export enum Platform {
   ETSY = 'Etsy',
   FACEBOOK = 'Facebook Marketplace',
   AMAZON = 'Amazon',
-  DROPSHIPPING = 'General Dropshipping'
+  DROPSHIPPING = 'General Dropshipping',
+  TIKTOK = 'TikTok Shop'
 }
 
 export interface OptimizedListing {
@@ -19,6 +20,7 @@ export interface OptimizedListing {
     marketAnalysis: string;
   };
   sources: { title: string; uri: string }[];
+  videoUri?: string;
 }
 
 export interface OptimizationRequest {
