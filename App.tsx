@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [activeAgent, setActiveAgent] = useState<number>(0);
   const [result, setResult] = useState<OptimizedListing | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +50,7 @@ const App: React.FC = () => {
 
     setIsOptimizing(true);
     setError(null);
+    setResult(null);
     try {
       const data = await optimizeListing(platform, roughTitle, zipCode, image || undefined);
       setResult(data);
@@ -61,7 +63,22 @@ const App: React.FC = () => {
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    });
+  };
+
+  const getMarketplaceUrl = (p: Platform) => {
+    switch (p) {
+      case Platform.EBAY: return 'https://www.ebay.com/sl/sell';
+      case Platform.POSHMARK: return 'https://poshmark.com/listing/new';
+      case Platform.ETSY: return 'https://www.etsy.com/your/shops/me/listing/create';
+      case Platform.FACEBOOK: return 'https://www.facebook.com/marketplace/create/item';
+      case Platform.AMAZON: return 'https://sellercentral.amazon.com/product-search';
+      case Platform.DROPSHIPPING: return '#';
+      default: return '#';
+    }
   };
 
   return (
@@ -245,10 +262,20 @@ const App: React.FC = () => {
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h4 className="text-[10px] font-black text-blood-500 uppercase tracking-[0.3em]">Algorithm Payload</h4>
-                      <Button variant="ghost" onClick={() => copyToClipboard(result.description)} className="h-8 w-8 !p-0">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m-3 8h4m-2-2v4" />
-                        </svg>
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => copyToClipboard(result.description)} 
+                        className={`h-8 w-8 !p-0 transition-colors ${copySuccess ? 'text-emerald-500' : 'text-gray-400'}`}
+                      >
+                        {copySuccess ? (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m-3 8h4m-2-2v4" />
+                          </svg>
+                        )}
                       </Button>
                     </div>
                     <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap font-medium bg-darkgrey-900/50 p-6 rounded-3xl border border-white/5 border-l-4 border-l-blood-500 shadow-inner">
@@ -328,7 +355,29 @@ const App: React.FC = () => {
 
               <div className="flex flex-col sm:flex-row justify-end gap-4 pt-4">
                 <Button variant="ghost" onClick={() => setResult(null)} className="text-[10px] uppercase tracking-widest font-black">Reset Core</Button>
-                <Button variant="primary" onClick={() => copyToClipboard(`${result.title}\n\n${result.description}\n\n${result.hashtags.join(' ')}`)} className="px-12 py-5 text-[10px] uppercase tracking-[0.4em] font-black">Deploy Optimization</Button>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="primary" 
+                    onClick={() => copyToClipboard(`${result.title}\n\n${result.description}\n\n${result.hashtags.join(' ')}`)} 
+                    className={`px-10 py-5 text-[10px] uppercase tracking-[0.4em] font-black min-w-[240px] transition-all duration-300 ${copySuccess ? 'bg-emerald-600 border-emerald-400' : ''}`}
+                  >
+                    {copySuccess ? 'LINK ESTABLISHED / COPIED' : 'COPY OPTIMIZATION'}
+                  </Button>
+                  
+                  {platform !== Platform.DROPSHIPPING && (
+                    <a 
+                      href={getMarketplaceUrl(platform)} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="bg-white/5 border border-white/10 hover:border-blood-500/50 hover:bg-blood-500/10 text-white rounded-lg flex items-center justify-center px-6 transition-all shadow-glow/20"
+                    >
+                      <svg className="w-5 h-5 text-blood-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           )}
