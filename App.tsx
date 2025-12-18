@@ -12,8 +12,7 @@ declare global {
   }
 
   interface Window {
-    // Fixed: Removed readonly modifier to match all declarations and ensure compatibility
-    aistudio: AIStudio;
+    aistudio?: AIStudio;
   }
 }
 
@@ -35,8 +34,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkKey = async () => {
       if (window.aistudio) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasPaidKey(selected);
+        try {
+          const selected = await window.aistudio.hasSelectedApiKey();
+          setHasPaidKey(selected);
+        } catch (e) {
+          console.debug("AI Studio environment not detected");
+        }
       }
     };
     checkKey();
@@ -70,8 +73,9 @@ const App: React.FC = () => {
   const handleSelectKey = async () => {
     if (window.aistudio) {
       await window.aistudio.openSelectKey();
-      // Assume success as per race-condition rules
       setHasPaidKey(true);
+    } else {
+      setError("AI Studio integration is required for this action on non-local domains.");
     }
   };
 
@@ -87,12 +91,17 @@ const App: React.FC = () => {
       const data = await optimizeListing(platform, roughTitle, zipCode, image || undefined);
       setResult(data);
     } catch (err: any) {
-      console.error(err);
-      if (err.message?.includes("Requested entity was not found") || err.message?.includes("API key not valid")) {
-        setHasPaidKey(false);
-        setError('Market Research requires a verified project. Use "Enable Video/Search" button.');
+      console.error("Diagnostic Log:", err);
+      const msg = err.message?.toLowerCase() || "";
+      
+      if (msg.includes("401") || msg.includes("403") || msg.includes("api_key") || msg.includes("invalid")) {
+        setError('CONFIGURATION ERROR: API Key is missing or invalid. Go to Netlify Settings > Env Variables and ensure API_KEY is set.');
+      } else if (msg.includes("429") || msg.includes("quota") || msg.includes("exhausted")) {
+        setError('RATE LIMIT: Too many requests. Please wait 60 seconds and try again.');
+      } else if (msg.includes("404")) {
+        setError('NOT FOUND: Ensure you have selected a valid project via "Enable Pro Features".');
       } else {
-        setError('System Congestion: Please retry in a moment.');
+        setError('SYSTEM CONGESTION: The model is currently overloaded. Retrying usually works after a few seconds.');
       }
     } finally {
       setIsOptimizing(false);
@@ -102,10 +111,11 @@ const App: React.FC = () => {
   const handleGenerateVideo = async () => {
     if (!result) return;
     
-    // Check key before video generation as it's a high-cost task
-    const check = await window.aistudio.hasSelectedApiKey();
-    if (!check) {
-      await handleSelectKey();
+    if (window.aistudio) {
+      const check = await window.aistudio.hasSelectedApiKey();
+      if (!check) {
+        await handleSelectKey();
+      }
     }
     
     setIsVideoGenerating(true);
@@ -116,9 +126,9 @@ const App: React.FC = () => {
     } catch (err: any) {
       if (err.message?.includes("Requested entity was not found")) {
         setHasPaidKey(false);
-        setError('Video synthesis requires a paid project. Re-select billing key.');
+        setError('Video synthesis requires a paid Google Cloud project. Please re-select a billing-enabled key.');
       } else {
-        setError('Synthesis Engine Timeout. Please check project billing status.');
+        setError('Synthesis Engine Timeout. Check your video generation quota in Google Cloud.');
       }
     } finally {
       setIsVideoGenerating(false);
@@ -140,13 +150,13 @@ const App: React.FC = () => {
             <div className="w-10 h-10 bg-blood-500 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-glow">L</div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-black text-white tracking-tighter">LISTINGPRO <span className="text-blood-500">AI</span></h1>
-              <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold">Reseller Intelligence Hub</p>
+              <p className="text-[9px] text-gray-500 uppercase tracking-widest font-bold">Reseller Command Center</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-             {!hasPaidKey && (
+             {!hasPaidKey && window.aistudio && (
                <Button variant="outline" onClick={handleSelectKey} className="text-[9px] border-blood-500/30 text-blood-400 h-9">
-                 UPGRADE TO PRO (FREE READY)
+                 ENABLE PRO FEATURES (BYOK)
                </Button>
              )}
              <div className="flex gap-3 items-center bg-white/5 px-4 py-2 rounded-full border border-white/5">
@@ -160,12 +170,11 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-6xl mx-auto px-6 py-10 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Input Control */}
         <div className="lg:col-span-5 space-y-6">
           <Card title="Listing Injection" glow>
             <div className="space-y-6">
               <div>
-                <label className="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3">Marketplace Core</label>
+                <label className="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3">Target Marketplace</label>
                 <div className="grid grid-cols-3 gap-1.5 p-1 bg-darkgrey-900 rounded-xl border border-white/5">
                   {[Platform.EBAY, Platform.POSHMARK, Platform.ETSY, Platform.FACEBOOK, Platform.AMAZON, Platform.TIKTOK].map((p) => (
                     <button key={p} onClick={() => setPlatform(p)}
@@ -199,8 +208,8 @@ const App: React.FC = () => {
                 <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
                 {image ? (
                   <div className="relative group">
-                    <img src={image} className="h-24 rounded-lg object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[8px] text-white font-bold uppercase rounded-lg">Change</div>
+                    <img src={image} className="h-40 rounded-lg object-contain shadow-2xl" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[8px] text-white font-black uppercase rounded-lg">Change Visual</div>
                   </div>
                 ) : (
                   <div className="text-center">
@@ -213,14 +222,20 @@ const App: React.FC = () => {
               </div>
 
               {error && (
-                <div className="p-3 bg-blood-900/20 text-blood-400 text-[9px] font-black rounded-lg border border-blood-500/20 uppercase leading-relaxed">
-                  {error}
-                  <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="block mt-1 underline">Check Billing Status</a>
+                <div className="p-4 bg-blood-900/30 text-blood-400 text-[10px] font-black rounded-xl border border-blood-500/40 uppercase leading-relaxed animate-pulse">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <span>{error}</span>
+                  </div>
+                  <div className="mt-3 flex gap-4 border-t border-blood-500/20 pt-3">
+                    <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="hover:text-white transition-colors">Billing Info</a>
+                    {window.aistudio && <button onClick={handleSelectKey} className="hover:text-white transition-colors">Select New Key</button>}
+                  </div>
                 </div>
               )}
 
-              <Button onClick={handleOptimize} isLoading={isOptimizing} className="w-full py-4 text-[10px] font-black uppercase tracking-[0.3em]">
-                {isOptimizing ? 'Processing Neural Net' : 'Optimize for ' + platform.split(' ')[0]}
+              <Button onClick={handleOptimize} isLoading={isOptimizing} className="w-full py-5 text-[11px] font-black uppercase tracking-[0.3em]">
+                {isOptimizing ? 'Consulting Neural Agents' : 'Generate Optimized Listing'}
               </Button>
             </div>
           </Card>
@@ -242,42 +257,41 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Output Console */}
         <div className="lg:col-span-7 space-y-6">
           {!result && !isOptimizing && !isVideoGenerating && (
             <div className="h-full min-h-[400px] border border-white/5 bg-darkgrey-800/50 rounded-3xl flex flex-col items-center justify-center text-gray-700 p-10 text-center">
-              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-6">
-                <svg className="w-8 h-8 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6 border border-white/5">
+                <svg className="w-10 h-10 opacity-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-black text-gray-600 uppercase tracking-tighter">System Idle</h3>
-              <p className="max-w-xs mt-3 text-[10px] text-gray-700 font-black uppercase tracking-[0.2em]">Upload product data to initiate the multi-agent optimization sequence.</p>
+              <h3 className="text-xl font-black text-gray-600 uppercase tracking-tighter">System Standby</h3>
+              <p className="max-w-xs mt-3 text-[10px] text-gray-700 font-black uppercase tracking-[0.2em]">Ready for optimization. All data is processed securely via Gemini 3 Flash.</p>
             </div>
           )}
 
           {result && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card glow title={`${platform} Strategy Output`}>
+              <Card glow title={`${platform} Optimization Hub`}>
                 <div className="space-y-6">
                   <div>
                     <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest">Optimized Title</h4>
-                      <button onClick={() => copyToClipboard(result.title)} className="text-[8px] text-gray-500 hover:text-blood-400 font-bold uppercase">Copy</button>
+                      <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest">SEO Header</h4>
+                      <button onClick={() => copyToClipboard(result.title)} className="text-[8px] text-gray-500 hover:text-blood-400 font-black uppercase transition-colors">{copySuccess ? 'Copied' : 'Copy'}</button>
                     </div>
                     <p className="text-2xl font-black text-white leading-tight tracking-tight">{result.title}</p>
                   </div>
                   
                   <div>
-                    <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest mb-3">Narrative Description</h4>
-                    <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap bg-darkgrey-900/80 p-5 rounded-2xl border border-white/5">
+                    <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest mb-3">High-Conversion Description</h4>
+                    <div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap bg-darkgrey-900/80 p-6 rounded-2xl border border-white/5">
                       {result.description}
                     </div>
                   </div>
 
                   {result.sources && result.sources.length > 0 && (
                     <div className="pt-4 border-t border-white/5">
-                      <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest mb-3">Market Verification Context</h4>
+                      <h4 className="text-[9px] font-black text-blood-500 uppercase tracking-widest mb-3">Grounded Market Intelligence</h4>
                       <div className="flex flex-wrap gap-1.5">
                         {result.sources.map((source, idx) => (
                           <a 
@@ -285,12 +299,10 @@ const App: React.FC = () => {
                             href={source.uri} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-[9px] bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 text-gray-400 hover:text-white hover:border-blood-500/50 transition-all flex items-center gap-1.5"
+                            className="text-[9px] bg-white/5 px-4 py-2 rounded-lg border border-white/5 text-gray-400 hover:text-white hover:border-blood-500/50 transition-all flex items-center gap-1.5"
                           >
-                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-                            </svg>
-                            {source.title.length > 25 ? source.title.substring(0, 25) + '...' : source.title}
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                            {source.title.length > 35 ? source.title.substring(0, 35) + '...' : source.title}
                           </a>
                         ))}
                       </div>
@@ -300,44 +312,41 @@ const App: React.FC = () => {
               </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card title="Market Valuation">
+                <Card title="Valuation Strategy">
                   <div className="space-y-3">
-                    <span className="text-3xl font-black text-white">{result.suggestedPrice}</span>
-                    <p className="text-[9px] text-gray-500 uppercase font-black leading-relaxed">{result.agentInsights.marketAnalysis}</p>
+                    <span className="text-4xl font-black text-white tracking-tighter">{result.suggestedPrice}</span>
+                    <p className="text-[10px] text-gray-500 uppercase font-black leading-relaxed">{result.agentInsights.marketAnalysis}</p>
                   </div>
                 </Card>
                 
-                <Card title="AI Showcase Video">
+                <Card title="AI Showcase Render">
                   {result.videoUri ? (
                     <div className="space-y-4">
-                      <video src={result.videoUri} controls className="w-full rounded-xl border border-white/10 shadow-xl" />
-                      <a href={result.videoUri} download className="block text-center text-[9px] font-black text-blood-500 uppercase hover:text-blood-400 transition-colors">Download Showcase Media</a>
+                      <video src={result.videoUri} controls className="w-full rounded-xl border border-white/10 shadow-glow-strong" />
+                      <a href={result.videoUri} download className="block text-center text-[9px] font-black text-blood-500 uppercase hover:text-blood-400 transition-colors">Export Cinematic Assets</a>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-4">
-                      <p className="text-[9px] text-gray-600 uppercase font-black leading-relaxed">Synthesize a cinematic promo video using Veo 3.1</p>
+                      <p className="text-[9px] text-gray-600 uppercase font-black leading-relaxed">Synthesize professional video using Veo 3.1 Fast. Requires connected project billing.</p>
                       <Button 
                         variant="outline" 
                         onClick={handleGenerateVideo} 
                         isLoading={isVideoGenerating}
-                        className="border-blood-500/30 text-blood-400 hover:bg-blood-500/10 h-12"
+                        className="border-blood-500/30 text-blood-400 hover:bg-blood-500/10 h-12 text-[10px] font-black uppercase tracking-widest"
                       >
-                        {isVideoGenerating ? 'Rendering Video...' : 'Launch Veo Render'}
+                        {isVideoGenerating ? 'Rendering...' : 'Launch Veo Synthesis'}
                       </Button>
-                      {!hasPaidKey && (
-                        <p className="text-[8px] text-gray-700 font-bold uppercase text-center italic">Requires Billing Enabled Project</p>
-                      )}
                     </div>
                   )}
                 </Card>
               </div>
 
               <div className="flex flex-col sm:flex-row justify-end gap-3">
-                <Button variant="ghost" onClick={() => setResult(null)} className="text-[9px] uppercase font-black px-6">New Analysis</Button>
+                <Button variant="ghost" onClick={() => setResult(null)} className="text-[10px] uppercase font-black px-6">New Optimization</Button>
                 <Button 
                   variant="primary" 
                   onClick={() => copyToClipboard(`${result.title}\n\n${result.description}`)} 
-                  className="px-10 py-4 text-[10px] uppercase font-black tracking-widest"
+                  className="px-10 py-5 text-[11px] uppercase font-black tracking-widest"
                 >
                   {copySuccess ? 'Copied to Clipboard' : 'Copy All Content'}
                 </Button>
@@ -347,12 +356,12 @@ const App: React.FC = () => {
         </div>
       </main>
       
-      <footer className="py-10 border-t border-white/5 text-center bg-darkgrey-900">
-        <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.5em]">Powered by Gemini 3 Flash & Veo 3.1 Fast</p>
-        <div className="mt-3 flex justify-center gap-6">
-           <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-[8px] text-gray-800 font-bold uppercase tracking-widest hover:text-gray-400">Project Billing</a>
-           <span className="text-gray-800">•</span>
-           <span className="text-[8px] text-gray-800 font-bold uppercase tracking-widest">Enterprise Reseller v2.0</span>
+      <footer className="py-12 border-t border-white/5 text-center bg-darkgrey-900">
+        <p className="text-[10px] font-black text-gray-700 uppercase tracking-[0.5em]">Enterprise Reseller Intelligence Hub v2.1</p>
+        <div className="mt-4 flex justify-center gap-8">
+           <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="text-[9px] text-gray-800 font-black uppercase tracking-widest hover:text-blood-400 transition-colors">Cloud Billing</a>
+           <span className="text-gray-900">|</span>
+           <span className="text-[9px] text-gray-800 font-black uppercase tracking-widest">Powered by Google Gemini</span>
         </div>
       </footer>
     </div>
