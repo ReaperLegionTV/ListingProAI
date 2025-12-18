@@ -1,0 +1,7 @@
+{
+  "name": "ListingPro AI - Reseller Optimizer",
+  "description": "A powerful SEO listing optimizer for eBay, Poshmark, and Etsy sellers. Transform rough notes and photos into high-converting descriptions instantly.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
